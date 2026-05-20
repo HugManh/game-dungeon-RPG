@@ -1,0 +1,2217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dungeon Explorer RPG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #0a151a; /* Ink Black */
+            color: #8cbbca; /* Sky Blue (Light) */
+            overflow: hidden; 
+            touch-action: none; 
+        }
+
+        .pixel-font {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        #game-board {
+            display: grid;
+            gap: 1px;
+            background-color: #10161c; /* Ink Black 2 for grid lines */
+            border: 4px solid #415d65; /* Dark Slate Grey */
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+        }
+
+        .tile {
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            transition: background-color 0.2s ease;
+        }
+
+        .tile.wall { background-color: #1d2d34; } /* Jet Black */
+        .tile.floor { background-color: #486672; } /* Blue Slate */
+        .tile.door { background-color: #5c7e88; border: 2px solid #1d2d34; } /* Slate Grey */
+        
+        .tile.fog { background-color: #10161c; z-index: 10; } /* Ink Black 2 */
+
+        .entity {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80%; 
+            line-height: 1;
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Keeping specific distinct colors for entities so they stand out, 
+           but adjusting slightly to match the cool vibe where possible */
+        .player { color: #8cbbca; font-weight: bold; text-shadow: 0 0 5px #6f97a9; z-index: 5; } /* Sky Blue Light */
+        .enemy { color: #fc8181; animation: breathe 2s infinite alternate; z-index: 4; } 
+        .chest { color: #f6e05e; z-index: 3; } 
+        .stairs { color: #d6bcfa; z-index: 2; } 
+
+        .floor-item { 
+            color: #80acba; /* Cool Steel */
+            text-shadow: 0 0 5px #8cbbca; 
+            animation: itemFloat 2s ease-in-out infinite; 
+            z-index: 3;
+            font-size: 70%; 
+        }
+
+        .pixel-font {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        #game-board {
+            display: grid;
+            gap: 1px;
+            background-color: #000;
+            border: 4px solid #4a5568; /* Tailwind gray-600 */
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            /* Grid template will be set dynamically via JS */
+        }
+
+        .tile {
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            transition: background-color 0.2s ease;
+        }
+
+        /* Entity styles using simple CSS shapes/colors or emojis */
+        .tile.wall { background-color: #2d3748; } /* Tailwind gray-800 */
+        .tile.floor { background-color: #4a5568; } /* Tailwind gray-600 */
+        .tile.door { background-color: #718096; border: 2px solid #2d3748; } /* Tailwind gray-500 */
+        
+        .tile.fog { background-color: #000; z-index: 10; }
+
+        .entity {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80%; /* Tự động điều chỉnh theo kích thước ô */
+            line-height: 1;
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        .player { color: #63b3ed; font-weight: bold; text-shadow: 0 0 5px #3182ce; z-index: 5; } /* Tailwind blue-300 */
+        .enemy { color: #fc8181; animation: breathe 2s infinite alternate; z-index: 4; } /* Tailwind red-300 */
+        .chest { color: #f6e05e; z-index: 3; } /* Tailwind yellow-300 */
+        .stairs { color: #d6bcfa; z-index: 2; } /* Tailwind purple-300 */
+
+        /* Style mới cho vật phẩm trên sàn */
+        .floor-item { 
+            color: #68d391; /* Tailwind green-400 */
+            text-shadow: 0 0 5px #9ae6b4; 
+            animation: itemFloat 2s ease-in-out infinite; 
+            z-index: 3;
+            font-size: 70%; /* Nhỏ hơn một chút */
+        }
+        @keyframes itemFloat {
+            0%, 100% { transform: translate(-50%, -50%); }
+            50% { transform: translate(-50%, -60%); }
+        }
+
+        @keyframes breathe {
+            0% { transform: translate(-50%, -50%) scale(0.9); }
+            100% { transform: translate(-50%, -50%) scale(1.1); }
+        }
+        
+        /* Hiệu ứng rung khi người tấn công ra đòn */
+        @keyframes attackShake {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.3); } /* Phóng to nhanh khi đánh */
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .attacking {
+            animation: attackShake 0.2s ease-in-out;
+            z-index: 20 !important; /* Đưa lên trên cùng khi tấn công */
+        }
+
+        /* Hiệu ứng khi đối tượng bị đánh trúng (rung lắc mạnh và nháy đỏ) */
+        @keyframes targetHitShake {
+            0% { transform: translate(-50%, -50%); }
+            20% { transform: translate(-55%, -50%) rotate(-10deg); }
+            40% { transform: translate(-45%, -50%) rotate(10deg); }
+            60% { transform: translate(-55%, -50%) rotate(-10deg); }
+            80% { transform: translate(-45%, -50%) rotate(10deg); }
+            100% { transform: translate(-50%, -50%) rotate(0deg); }
+        }
+
+        @keyframes targetHitFlash {
+            0%, 100% { filter: none; opacity: 1; }
+            50% { filter: brightness(2) sepia(1) hue-rotate(-50deg) saturate(5); opacity: 0.8; } /* Nháy đỏ rực */
+        }
+
+        .hit-effect {
+            animation: targetHitShake 0.3s ease-in-out, targetHitFlash 0.3s ease-in-out;
+        }
+
+        #log-container {
+            height: 150px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #415d65 #13232b;
+        }
+        #log-container::-webkit-scrollbar { width: 8px; }
+        #log-container::-webkit-scrollbar-track { background: #13232b; } /* Jet Black 2 */
+        #log-container::-webkit-scrollbar-thumb { background-color: #415d65; border-radius: 4px; } /* Dark Slate Grey */
+
+        .log-entry { margin-bottom: 0.25rem; }
+        .log-combat { color: #fc8181; }
+        .log-loot { color: #f6e05e; }
+        .log-level { color: #8cbbca; } /* Sky Blue */
+        .log-sys { color: #6f97a9; font-style: italic; } /* Steel Blue */
+
+        /* Controls */
+        .d-pad-btn {
+            width: 50px;
+            height: 50px;
+            background-color: rgba(29, 45, 52, 0.8); /* Jet Black with alpha */
+            border: 2px solid #5c7e88; /* Slate Grey */
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            color: #8cbbca;
+            user-select: none;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(10, 21, 26, 0.5);
+            transition: background-color 0.1s, transform 0.1s;
+        }
+        .d-pad-btn:active {
+            background-color: rgba(65, 93, 101, 0.9); /* Dark Slate Grey */
+            transform: scale(0.95);
+        }
+
+        /* Health Bar */
+        .bar-container {
+            width: 100%;
+            background-color: #13232b; /* Jet Black 2 */
+            border-radius: 4px;
+            height: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #415d65; /* Dark Slate Grey */
+        }
+        .bar-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        .hp-fill { background-color: #e53e3e; } /* Keeping HP red */
+        .xp-fill { background-color: #6f97a9; } /* Steel Blue */
+        .bar-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #e2e8f0;
+            text-shadow: 1px 1px 2px #0a151a;
+            white-space: nowrap;
+        }
+        
+        /* Custom UI Panel Classes */
+        .ui-panel {
+            background-color: #13232b; /* Jet Black 2 */
+            border-color: #415d65; /* Dark Slate Grey */
+        }
+        .ui-inner-panel {
+            background-color: #0a151a; /* Ink Black */
+            border-color: #1d2d34; /* Jet Black */
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen p-2 md:p-4 md:items-center justify-center">
+
+    <div id="game-container" class="w-full max-w-[1200px] flex flex-col md:flex-row gap-4 h-full md:h-auto">
+        
+        <!-- Left Column: Game Area -->
+        <div class="flex-grow flex flex-col items-center justify-center relative">
+            
+            <div id="top-bar" class="w-full flex justify-between items-center mb-2 px-2 pixel-font text-xs md:text-base" style="color: #6f97a9;">
+                <div>Level: <span id="ui-level" style="color: #8cbbca;">1</span></div>
+                <div>Floor: <span id="ui-floor" class="text-purple-300">1</span></div>
+                <div>Score: <span id="ui-score" class="text-yellow-300">0</span></div>
+            </div>
+
+            <div id="board-container" class="w-full aspect-square max-h-[65vh] md:max-h-[85vh] flex items-center justify-center">
+                <div id="game-board" class="w-full h-full"></div>
+            </div>
+
+            <!-- Mobile Controls Overlay (only visible on small screens typically) -->
+            <div id="mobile-controls" class="mt-4 flex flex-col items-center gap-2 md:hidden">
+                <div class="d-pad-btn" id="btn-up">⬆️</div>
+                <div class="flex gap-2">
+                    <div class="d-pad-btn" id="btn-left">⬅️</div>
+                    <div class="d-pad-btn" id="btn-down">⬇️</div>
+                    <div class="d-pad-btn" id="btn-right">➡️</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: UI & Stats -->
+        <div class="w-full md:w-80 flex flex-col gap-4 ui-panel p-4 rounded-xl border-2 shadow-xl overflow-hidden shrink-0">
+            
+            <div class="text-center pb-2 border-b" style="border-color: #415d65;">
+                <h1 class="pixel-font text-lg" style="color: #8cbbca;">Dungeon<br>Explorer</h1>
+            </div>
+
+            <!-- Stats -->
+            <div class="flex flex-col gap-2">
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span>Health</span>
+                    </div>
+                    <div class="bar-container">
+                        <div id="hp-bar" class="bar-fill hp-fill" style="width: 100%;"></div>
+                        <div id="hp-text" class="bar-text">20 / 20</div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span>Experience</span>
+                    </div>
+                    <div class="bar-container">
+                        <div id="xp-bar" class="bar-fill xp-fill" style="width: 0%;"></div>
+                        <div id="xp-text" class="bar-text">0 / 10</div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2 text-sm mt-2 p-2 ui-inner-panel rounded border">
+                    <div>Atk: <span id="ui-atk" class="font-bold text-red-400">5</span></div>
+                    <div>Def: <span id="ui-def" class="font-bold" style="color: #80acba;">2</span></div>
+                </div>
+            </div>
+
+            <!-- Message Log -->
+            <div class="flex-grow flex flex-col min-h-[100px]">
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-2 border-b pb-1" style="color: #5c7e88; border-color: #415d65;">Adventure Log</h3>
+                <div id="log-container" class="ui-inner-panel p-2 rounded border text-xs font-mono h-full flex-grow">
+                    <!-- Logs go here -->
+                </div>
+            </div>
+            
+            <div class="text-xs text-center pt-2" style="color: #5c7e88;">
+                Use Arrow Keys / WASD to move.<br>Bump into enemies to attack.
+            </div>
+        </div>
+    </div>
+
+    <div id="game-over-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+        <div class="ui-panel border-4 border-red-900 p-8 rounded-xl max-w-sm w-full text-center flex flex-col items-center shadow-[0_0_50px_rgba(220,38,38,0.5)]">
+            <h2 class="pixel-font text-3xl text-red-500 mb-4">YOU DIED</h2>
+            <div class="mb-6 space-y-2 text-lg" style="color: #8cbbca;">
+                <p>Floor Reached: <span id="end-floor" class="font-bold text-purple-400">1</span></p>
+                <p>Final Level: <span id="end-level" class="font-bold" style="color: #80acba;">1</span></p>
+                <p>Score: <span id="end-score" class="font-bold text-yellow-400">0</span></p>
+            </div>
+            <button id="restart-btn" class="pixel-font bg-red-800 hover:bg-red-700 text-white py-3 px-6 rounded border-2 border-red-500 transition-colors w-full">TRY AGAIN</button>
+        </div>
+    </div>
+
+    <div id="msg-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-40 flex items-center justify-center p-4">
+        <div class="ui-panel border-2 p-6 rounded-xl max-w-sm w-full text-center flex flex-col items-center" style="border-color: #5c7e88;">
+            <h2 id="msg-title" class="pixel-font text-xl mb-4" style="color: #80acba;">Info</h2>
+            <p id="msg-content" class="mb-6" style="color: #8cbbca;">Message goes here.</p>
+            <button id="msg-close-btn" class="ui-inner-panel hover:bg-opacity-80 text-white py-2 px-6 rounded border transition-colors w-full" style="border-color: #5c7e88; color: #8cbbca;">OK</button>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            mapWidth: 30,
+            mapHeight: 30,
+            viewRadius: 8, // Tăng tầm nhìn xa hơn một chút (từ 6 lên 8)
+            tileSize: 30, // Base size in pixels, adjusts via CSS
+            maxRooms: 10,
+            roomMinSize: 4,
+            roomMaxSize: 9,
+            cameraWidth: 15,
+            cameraHeight: 15
+        };
+
+        // Entity Types
+        const TYPES = {
+            WALL: 'wall',
+            FLOOR: 'floor',
+            PLAYER: 'player',
+            ENEMY: 'enemy',
+            CHEST: 'chest',
+            STAIRS: 'stairs',
+            ITEM: 'item' // Thêm loại vật phẩm trên sàn
+        };
+
+        const ENEMY_TYPES = [
+            { name: "Goblin", symbol: "👺", hp: 10, atk: 3, def: 1, xp: 5, color: "#48bb78" },
+            { name: "Skeleton", symbol: "💀", hp: 15, atk: 4, def: 2, xp: 8, color: "#e2e8f0" },
+            { name: "Orc", symbol: "👹", hp: 25, atk: 6, def: 3, xp: 15, color: "#38a169" },
+            { name: "Slime", symbol: "💧", hp: 8, atk: 2, def: 0, xp: 3, color: "#4299e1" },
+            { name: "Bat", symbol: "🦇", hp: 5, atk: 5, def: 0, xp: 4, color: "#a0aec0" }
+        ];
+
+        const ITEM_TYPES = [
+            { name: "Health Potion", type: "heal", value: 15, symbol: "🍎" },
+            { name: "Big Potion", type: "heal", value: 30, symbol: "🍖" },
+            { name: "Sword Upgrade", type: "atk", value: 2, symbol: "🗡️" },
+            { name: "Shield Upgrade", type: "def", value: 1, symbol: "🛡️" },
+            { name: "Experience Scroll", type: "xp", value: 20, symbol: "📜" }
+        ];
+
+        let gameState = {
+            map: [], // 2D array of tile objects
+            entities: [], // Array of interactive objects (enemies, chests, stairs)
+            player: {
+                x: 0, y: 0,
+                hp: 20, maxHp: 20,
+                atk: 5, def: 2,
+                level: 1, xp: 0, nextXp: 15,
+                symbol: "🧙‍♂️"
+            },
+            floor: 1,
+            score: 0,
+            isPlaying: true
+        };
+
+        // DOM Elements
+        const boardEl = document.getElementById('game-board');
+        const boardContainerEl = document.getElementById('board-container');
+        const logContainer = document.getElementById('log-container');
+        
+        function log(message, type = 'normal') {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            // Add timestamp
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            
+            let colorClass = '';
+            if (type === 'combat') colorClass = 'log-combat';
+            else if (type === 'loot') colorClass = 'log-loot';
+            else if (type === 'sys') colorClass = 'log-sys';
+            else if (type === 'level') colorClass = 'log-level';
+
+            entry.innerHTML = `<span class="mr-1" style="color: #5c7e88;">[${timeStr}]</span> <span class="${colorClass}">${message}</span>`;
+            
+            logContainer.appendChild(entry);
+            // Auto scroll to bottom
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Keep only last 50 logs
+            if (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        function updateUI() {
+            // Stats text
+            document.getElementById('ui-level').innerText = gameState.player.level;
+            document.getElementById('ui-floor').innerText = gameState.floor;
+            document.getElementById('ui-score').innerText = gameState.score;
+            document.getElementById('ui-atk').innerText = gameState.player.atk;
+            document.getElementById('ui-def').innerText = gameState.player.def;
+
+            // Health Bar
+            const hpPercent = Math.max(0, (gameState.player.hp / gameState.player.maxHp) * 100);
+            document.getElementById('hp-bar').style.width = `${hpPercent}%`;
+            document.getElementById('hp-text').innerText = `${gameState.player.hp} / ${gameState.player.maxHp}`;
+            
+            // Change color if low
+            if (hpPercent < 25) document.getElementById('hp-bar').style.backgroundColor = '#9b2c2c'; // Darker red
+            else document.getElementById('hp-bar').style.backgroundColor = '#e53e3e';
+
+            // XP Bar
+            const xpPercent = Math.min(100, (gameState.player.xp / gameState.player.nextXp) * 100);
+            document.getElementById('xp-bar').style.width = `${xpPercent}%`;
+            document.getElementById('xp-text').innerText = `${gameState.player.xp} / ${gameState.player.nextXp}`;
+        }
+
+        function showMessage(title, content) {
+            document.getElementById('msg-title').innerText = title;
+            document.getElementById('msg-content').innerHTML = content;
+            document.getElementById('msg-modal').classList.remove('hidden');
+        }
+
+        document.getElementById('msg-close-btn').addEventListener('click', () => {
+            document.getElementById('msg-modal').classList.add('hidden');
+        });
+
+        class Rect {
+            constructor(x, y, w, h) {
+                this.x1 = x;
+                this.y1 = y;
+                this.x2 = x + w;
+                this.y2 = y + h;
+            }
+            center() {
+                const centerX = Math.floor((this.x1 + this.x2) / 2);
+                const centerY = Math.floor((this.y1 + this.y2) / 2);
+                return { x: centerX, y: centerY };
+            }
+            intersect(other) {
+                return (this.x1 <= other.x2 && this.x2 >= other.x1 &&
+                        this.y1 <= other.y2 && this.y2 >= other.y1);
+            }
+        }
+
+        function createMap() {
+            // Initialize map with walls
+            gameState.map = [];
+            for (let y = 0; y < CONFIG.mapHeight; y++) {
+                let row = [];
+                for (let x = 0; x < CONFIG.mapWidth; x++) {
+                    row.push({ type: TYPES.WALL, explored: false, visible: false });
+                }
+                gameState.map.push(row);
+            }
+            gameState.entities = [];
+
+            const rooms = [];
+            
+            // Simple Room placement
+            for (let i = 0; i < CONFIG.maxRooms; i++) {
+                const w = Math.floor(Math.random() * (CONFIG.roomMaxSize - CONFIG.roomMinSize + 1)) + CONFIG.roomMinSize;
+                const h = Math.floor(Math.random() * (CONFIG.roomMaxSize - CONFIG.roomMinSize + 1)) + CONFIG.roomMinSize;
+                const x = Math.floor(Math.random() * (CONFIG.mapWidth - w - 1)) + 1;
+                const y = Math.floor(Math.random() * (CONFIG.mapHeight - h - 1)) + 1;
+
+                const newRoom = new Rect(x, y, w, h);
+                let failed = false;
+
+                // Check intersection
+                for (let j = 0; j < rooms.length; j++) {
+                    if (newRoom.intersect(rooms[j])) {
+                        failed = true;
+                        break;
+                    }
+                }
+
+                if (!failed) {
+                    // Carve room
+                    createRoom(newRoom);
+                    
+                    const center = newRoom.center();
+
+                    if (rooms.length === 0) {
+                        // Place player in first room
+                        gameState.player.x = center.x;
+                        gameState.player.y = center.y;
+                    } else {
+                        // Connect to previous room
+                        const prevCenter = rooms[rooms.length - 1].center();
+                        
+                        // Randomly start horizontal or vertical tunnel
+                        if (Math.random() > 0.5) {
+                            createHTunnel(prevCenter.x, center.x, prevCenter.y);
+                            createVTunnel(prevCenter.y, center.y, center.x);
+                        } else {
+                            createVTunnel(prevCenter.y, center.y, prevCenter.x);
+                            createHTunnel(prevCenter.x, center.x, center.y);
+                        }
+
+                        // Populate room
+                        populateRoom(newRoom);
+                    }
+                    rooms.push(newRoom);
+                }
+            }
+
+            // Place Stairs in the last room
+            const lastRoomCenter = rooms[rooms.length - 1].center();
+            addEntity(TYPES.STAIRS, lastRoomCenter.x, lastRoomCenter.y, "🌀", { name: "Stairs Down" });
+        }
+
+        function createRoom(room) {
+            for (let x = room.x1 + 1; x < room.x2; x++) {
+                for (let y = room.y1 + 1; y < room.y2; y++) {
+                    gameState.map[y][x].type = TYPES.FLOOR;
+                }
+            }
+        }
+
+        function createHTunnel(x1, x2, y) {
+            const min = Math.min(x1, x2);
+            const max = Math.max(x1, x2);
+            for (let x = min; x <= max; x++) {
+                gameState.map[y][x].type = TYPES.FLOOR;
+            }
+        }
+
+        function createVTunnel(y1, y2, x) {
+            const min = Math.min(y1, y2);
+            const max = Math.max(y1, y2);
+            for (let y = min; y <= max; y++) {
+                gameState.map[y][x].type = TYPES.FLOOR;
+            }
+        }
+
+        function populateRoom(room) {
+            // Chance to spawn enemies
+            const maxEnemies = Math.floor(gameState.floor / 3) + 1;
+            const numEnemies = Math.floor(Math.random() * (maxEnemies + 1));
+            
+            for (let i = 0; i < numEnemies; i++) {
+                const x = Math.floor(Math.random() * (room.x2 - room.x1 - 1)) + room.x1 + 1;
+                const y = Math.floor(Math.random() * (room.y2 - room.y1 - 1)) + room.y1 + 1;
+                
+                if (!isEntityAt(x, y) && !(x === gameState.player.x && y === gameState.player.y)) {
+                    // Pick random enemy scaling somewhat with floor
+                    const enemyTemplate = ENEMY_TYPES[Math.floor(Math.random() * Math.min(ENEMY_TYPES.length, Math.ceil(gameState.floor/2) + 1))];
+                    
+                    // Scale enemy stats based on floor
+                    const multiplier = 1 + (gameState.floor - 1) * 0.2;
+                    
+                    addEntity(TYPES.ENEMY, x, y, enemyTemplate.symbol, {
+                        name: enemyTemplate.name,
+                        hp: Math.floor(enemyTemplate.hp * multiplier),
+                        maxHp: Math.floor(enemyTemplate.hp * multiplier),
+                        atk: Math.floor(enemyTemplate.atk * multiplier),
+                        def: Math.floor(enemyTemplate.def * multiplier),
+                        xp: Math.floor(enemyTemplate.xp * multiplier),
+                        color: enemyTemplate.color,
+                        id: `enemy_${Math.random().toString(36).substr(2, 9)}`
+                    });
+                }
+            }
+
+            // Tỉ lệ xuất hiện vật phẩm trên sàn (tách biệt với rương)
+            if (Math.random() < 0.5) { // 50% cơ hội mỗi phòng
+                const x = Math.floor(Math.random() * (room.x2 - room.x1 - 1)) + room.x1 + 1;
+                const y = Math.floor(Math.random() * (room.y2 - room.y1 - 1)) + room.y1 + 1;
+                
+                if (!isEntityAt(x, y) && !(x === gameState.player.x && y === gameState.player.y)) {
+                    // Chọn ngẫu nhiên vật phẩm hồi máu hoặc kinh nghiệm (không có nâng cấp sức mạnh trên sàn)
+                    const floorItemTypes = ITEM_TYPES.filter(i => i.type === 'heal' || i.type === 'xp');
+                    const itemTemplate = floorItemTypes[Math.floor(Math.random() * floorItemTypes.length)];
+                    
+                    addEntity(TYPES.ITEM, x, y, itemTemplate.symbol, {
+                        item: itemTemplate,
+                        id: `item_${Math.random().toString(36).substr(2, 9)}`
+                    });
+                }
+            }
+
+            // Chance to spawn chest
+            if (Math.random() < 0.3) {
+                const x = Math.floor(Math.random() * (room.x2 - room.x1 - 1)) + room.x1 + 1;
+                const y = Math.floor(Math.random() * (room.y2 - room.y1 - 1)) + room.y1 + 1;
+                
+                if (!isEntityAt(x, y) && !(x === gameState.player.x && y === gameState.player.y)) {
+                    const item = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
+                    addEntity(TYPES.CHEST, x, y, "🧰", { item: item, id: `chest_${Math.random().toString(36).substr(2, 9)}` });
+                }
+            }
+        }
+
+        function addEntity(type, x, y, symbol, properties = {}) {
+            gameState.entities.push({
+                type, x, y, symbol, ...properties
+            });
+        }
+
+        function getEntityAt(x, y) {
+            return gameState.entities.find(e => e.x === x && e.y === y);
+        }
+        
+        function isEntityAt(x, y) {
+            return getEntityAt(x, y) !== undefined;
+        }
+
+        function removeEntity(id) {
+            gameState.entities = gameState.entities.filter(e => e.id !== id);
+        }
+
+        function computeFOV() {
+            const px = gameState.player.x;
+            const py = gameState.player.y;
+            const r = CONFIG.viewRadius;
+
+            // Reset visibility
+            for (let y = 0; y < CONFIG.mapHeight; y++) {
+                for (let x = 0; x < CONFIG.mapWidth; x++) {
+                    gameState.map[y][x].visible = false;
+                }
+            }
+
+            // Mark player position as visible and explored
+            gameState.map[py][px].visible = true;
+            gameState.map[py][px].explored = true;
+
+            // Simple raycasting loop around perimeter
+            for (let i = 0; i < 360; i += 2) { // Step by 2 degrees for performance
+                const rad = i * Math.PI / 180;
+                const dx = Math.cos(rad);
+                const dy = Math.sin(rad);
+
+                let x = px + 0.5;
+                let y = py + 0.5;
+
+                for (let j = 0; j < r; j++) {
+                    x += dx;
+                    y += dy;
+                    
+                    const mapX = Math.floor(x);
+                    const mapY = Math.floor(y);
+
+                    if (mapX < 0 || mapX >= CONFIG.mapWidth || mapY < 0 || mapY >= CONFIG.mapHeight) break;
+
+                    gameState.map[mapY][mapX].visible = true;
+                    gameState.map[mapY][mapX].explored = true;
+
+                    // Stop ray if hits a wall
+                    if (gameState.map[mapY][mapX].type === TYPES.WALL) break;
+                }
+            }
+        }
+
+        function render() {
+            boardEl.innerHTML = '';
+            
+            // Tính toán vị trí camera (15x15) tập trung vào nhân vật
+            let camX = Math.floor(gameState.player.x - CONFIG.cameraWidth / 2);
+            let camY = Math.floor(gameState.player.y - CONFIG.cameraHeight / 2);
+            
+            // Giới hạn camera không vượt quá viền của bản đồ
+            camX = Math.max(0, Math.min(camX, CONFIG.mapWidth - CONFIG.cameraWidth));
+            camY = Math.max(0, Math.min(camY, CONFIG.mapHeight - CONFIG.cameraHeight));
+
+            // Đặt grid cố định cho camera (15x15 ô)
+            boardEl.style.gridTemplateColumns = `repeat(${CONFIG.cameraWidth}, 1fr)`;
+            boardEl.style.gridTemplateRows = `repeat(${CONFIG.cameraHeight}, 1fr)`;
+
+            // Create fragment for performance
+            const fragment = document.createDocumentFragment();
+
+            // Chỉ render những ô nằm trong khung hình của camera
+            for (let y = camY; y < camY + CONFIG.cameraHeight; y++) {
+                for (let x = camX; x < camX + CONFIG.cameraWidth; x++) {
+                    
+                    const tileData = gameState.map[y][x];
+                    const tileEl = document.createElement('div');
+                    tileEl.className = `tile ${tileData.type}`;
+                    
+                    // Handle fog of war
+                    if (!tileData.visible) {
+                        if (tileData.explored) {
+                            // Explored but not visible - darken it
+                            tileEl.style.filter = 'brightness(0.3)';
+                        } else {
+                            // Unexplored
+                            tileEl.classList.add('fog');
+                        }
+                    }
+
+                    // Only render entities if tile is visible or (explored and static)
+                    if (tileData.visible) {
+                        // Check for player
+                        if (x === gameState.player.x && y === gameState.player.y) {
+                            const pEl = document.createElement('div');
+                            pEl.className = 'entity player';
+                            pEl.id = 'player-entity';
+                            pEl.innerHTML = gameState.player.symbol;
+                            tileEl.appendChild(pEl);
+                        } else {
+                            // Check for entities
+                            const entity = getEntityAt(x, y);
+                            if (entity) {
+                                const eEl = document.createElement('div');
+                                eEl.className = `entity ${entity.type}`;
+                                // Thêm class riêng cho vật phẩm trên sàn
+                                if (entity.type === TYPES.ITEM) {
+                                    eEl.classList.add('floor-item');
+                                }
+                                eEl.innerHTML = entity.symbol;
+                                
+                                // Custom ID for animation targeting
+                                if(entity.id) eEl.id = entity.id;
+
+                                tileEl.appendChild(eEl);
+                            }
+                        }
+                    }
+                    
+                    fragment.appendChild(tileEl);
+                }
+            }
+            boardEl.appendChild(fragment);
+            updateUI();
+        }
+
+        function attack(attacker, defender, isPlayerAttacking) {
+            // Damage formula: Atk - (Def / 2), minimum 1
+            const baseDmg = Math.max(1, attacker.atk - Math.floor(defender.def / 2));
+            // Add some randomness +/- 20%
+            const variance = Math.floor(baseDmg * 0.2);
+            const finalDmg = Math.max(1, baseDmg + (Math.floor(Math.random() * (variance * 2 + 1)) - variance));
+
+            defender.hp -= finalDmg;
+
+            // Hiệu ứng hình ảnh khi tấn công và bị đánh trúng
+            let attackerEl, defenderEl;
+            if (isPlayerAttacking) {
+                attackerEl = document.getElementById('player-entity');
+                defenderEl = document.getElementById(defender.id);
+            } else {
+                attackerEl = document.getElementById(attacker.id);
+                defenderEl = document.getElementById('player-entity');
+            }
+
+            // Áp dụng hiệu ứng cho người tấn công (phóng to nhanh)
+            if (attackerEl) {
+                attackerEl.classList.add('attacking');
+                setTimeout(() => attackerEl.classList.remove('attacking'), 200);
+            }
+            // Áp dụng hiệu ứng cho người bị đánh (rung lắc mạnh và nháy đỏ)
+            if (defenderEl) {
+                defenderEl.classList.add('hit-effect');
+                setTimeout(() => defenderEl.classList.remove('hit-effect'), 300);
+            }
+            
+            if (isPlayerAttacking) {
+                log(`You hit ${defender.name} for ${finalDmg} dmg!`, 'combat');
+                if (defender.hp <= 0) {
+                    log(`Defeated ${defender.name}! Gained ${defender.xp} XP.`, 'loot');
+                    gameState.score += defender.maxHp;
+                    gainXP(defender.xp);
+                    removeEntity(defender.id);
+                }
+            } else {
+                log(`${attacker.name} hits you for ${finalDmg} dmg!`, 'combat');
+                if (defender.hp <= 0) {
+                    gameOver();
+                }
+            }
+        }
+
+        function gainXP(amount) {
+            gameState.player.xp += amount;
+            while (gameState.player.xp >= gameState.player.nextXp) {
+                levelUp();
+            }
+        }
+
+        function levelUp() {
+            gameState.player.level++;
+            gameState.player.xp -= gameState.player.nextXp;
+            gameState.player.nextXp = Math.floor(gameState.player.nextXp * 1.5);
+            
+            // Stat increases
+            gameState.player.maxHp += 5;
+            gameState.player.hp = gameState.player.maxHp; // Heal on level up
+            gameState.player.atk += 2;
+            gameState.player.def += 1;
+            
+            log(`LEVEL UP! You are now level ${gameState.player.level}!`, 'level');
+        }
+
+        function interact(entity) {
+            if (entity.type === TYPES.ENEMY) {
+                attack(gameState.player, entity, true);
+                return false; // Don't move into enemy square
+            }
+
+            // Xử lý khi nhặt vật phẩm trên sàn
+            if (entity.type === TYPES.ITEM) {
+                const item = entity.item;
+                log(`Picked up ${item.symbol} ${item.name}.`, 'loot');
+                
+                // Áp dụng hiệu ứng vật phẩm (tương tự như mở rương nhưng không có nâng cấp stat)
+                if (item.type === 'heal') {
+                    const healAmount = Math.min(item.value, gameState.player.maxHp - gameState.player.hp);
+                    gameState.player.hp += healAmount;
+                    if(healAmount > 0) log(`Healed for ${healAmount} HP.`, 'loot');
+                    else log("Already at full health.", 'normal');
+                } else if (item.type === 'xp') {
+                    gainXP(item.value);
+                }
+                
+                removeEntity(entity.id);
+                return true; // Cho phép di chuyển vào ô đó sau khi nhặt
+            }
+            
+            if (entity.type === TYPES.CHEST) {
+                const item = entity.item;
+                log(`Opened chest: Found ${item.symbol} ${item.name}!`, 'loot');
+                gameState.score += 50;
+                
+                // Apply item effect
+                if (item.type === 'heal') {
+                    const healAmount = Math.min(item.value, gameState.player.maxHp - gameState.player.hp);
+                    gameState.player.hp += healAmount;
+                    if(healAmount > 0) log(`Healed for ${healAmount} HP.`, 'loot');
+                    else log("Already at full health.", 'normal');
+                } else if (item.type === 'atk') {
+                    gameState.player.atk += item.value;
+                } else if (item.type === 'def') {
+                    gameState.player.def += item.value;
+                } else if (item.type === 'xp') {
+                    gainXP(item.value);
+                }
+                
+                removeEntity(entity.id);
+                return true; // Can move into square after opening
+            }
+
+            if (entity.type === TYPES.STAIRS) {
+                log(`Descending to floor ${gameState.floor + 1}...`, 'sys');
+                gameState.floor++;
+                gameState.score += 100 * gameState.floor;
+                startFloor();
+                return false; // Map regenerates, position changes
+            }
+
+            return true;
+        }
+
+        function movePlayer(dx, dy) {
+            if (!gameState.isPlaying) return;
+
+            const newX = gameState.player.x + dx;
+            const newY = gameState.player.y + dy;
+
+            // Check boundaries
+            if (newX < 0 || newX >= CONFIG.mapWidth || newY < 0 || newY >= CONFIG.mapHeight) return;
+
+            // Check walls
+            if (gameState.map[newY][newX].type === TYPES.WALL) {
+                // log("You bump into a wall.");
+                return;
+            }
+
+            // Check entities
+            const entity = getEntityAt(newX, newY);
+            let canMove = true;
+            if (entity) {
+                canMove = interact(entity);
+            }
+
+            if (canMove) {
+                gameState.player.x = newX;
+                gameState.player.y = newY;
+            }
+
+            // End of player turn, execute enemy turns
+            if(gameState.isPlaying) {
+                enemiesTurn();
+            }
+
+            computeFOV();
+            render();
+        }
+
+        function enemiesTurn() {
+            // Very simple AI: if player is visible and adjacent, attack.
+            // Otherwise, chance to wander randomly if player is nearby.
+            
+            gameState.entities.forEach(entity => {
+                if (entity.type === TYPES.ENEMY && entity.hp > 0) {
+                    
+                    const dx = gameState.player.x - entity.x;
+                    const dy = gameState.player.y - entity.y;
+                    const dist = Math.abs(dx) + Math.abs(dy); // Manhattan distance
+
+                    if (dist === 1) {
+                        // Adjacent, attack player
+                        attack(entity, gameState.player, false);
+                    } else if (dist < 5 && gameState.map[entity.y][entity.x].visible) {
+                        // Move towards player (simple pathfinding)
+                        let moveX = 0;
+                        let moveY = 0;
+                        
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            moveX = dx > 0 ? 1 : -1;
+                        } else {
+                            moveY = dy > 0 ? 1 : -1;
+                        }
+
+                        const newEx = entity.x + moveX;
+                        const newEy = entity.y + moveY;
+                        
+                        // Check if valid move
+                        if (gameState.map[newEy][newEx].type !== TYPES.WALL && 
+                            !isEntityAt(newEx, newEy) && 
+                            !(newEx === gameState.player.x && newEy === gameState.player.y)) {
+                            entity.x = newEx;
+                            entity.y = newEy;
+                        }
+                    }
+                }
+            });
+        }
+
+        function gameOver() {
+            gameState.isPlaying = false;
+            log("You have died...", 'combat');
+            
+            document.getElementById('end-floor').innerText = gameState.floor;
+            document.getElementById('end-level').innerText = gameState.player.level;
+            document.getElementById('end-score').innerText = gameState.score;
+            document.getElementById('game-over-modal').classList.remove('hidden');
+        }
+
+        function resetGame() {
+            gameState.player = {
+                x: 0, y: 0,
+                hp: 20, maxHp: 20,
+                atk: 5, def: 2,
+                level: 1, xp: 0, nextXp: 15,
+                symbol: "🧙‍♂️"
+            };
+            gameState.floor = 1;
+            gameState.score = 0;
+            gameState.isPlaying = true;
+            logContainer.innerHTML = '';
+            document.getElementById('game-over-modal').classList.add('hidden');
+            
+            log("Welcome to Dungeon Explorer!", 'sys');
+            startFloor();
+        }
+
+        function startFloor() {
+            createMap();
+            computeFOV();
+            render();
+            // Optional: Heal slightly on new floor
+            if(gameState.floor > 1 && gameState.player.hp < gameState.player.maxHp) {
+                const heal = Math.floor(gameState.player.maxHp * 0.2);
+                gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + heal);
+                log(`Rested briefly. Recovered ${heal} HP.`, 'normal');
+            }
+            updateUI();
+        }
+
+        window.addEventListener('keydown', (e) => {
+            // Prevent default scrolling for arrow keys
+            if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].indexOf(e.code) > -1) {
+                e.preventDefault();
+            }
+
+            if (!gameState.isPlaying) return;
+
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    movePlayer(0, -1);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    movePlayer(0, 1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    movePlayer(-1, 0);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    movePlayer(1, 0);
+                    break;
+            }
+        });
+
+        // Mobile Controls (D-pad)
+        document.getElementById('btn-up').addEventListener('click', () => movePlayer(0, -1));
+        document.getElementById('btn-down').addEventListener('click', () => movePlayer(0, 1));
+        document.getElementById('btn-left').addEventListener('click', () => movePlayer(-1, 0));
+        document.getElementById('btn-right').addEventListener('click', () => movePlayer(1, 0));
+
+        // TÍNH NĂNG VUỐT (SWIPE) CHO MOBILE
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        document.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        document.addEventListener('touchend', function(e) {
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+        }, { passive: true });
+
+        function handleSwipe(startX, startY, endX, endY) {
+            if (!gameState.isPlaying) return;
+            
+            let dx = endX - startX;
+            let dy = endY - startY;
+            
+            // Yêu cầu vuốt một đoạn tối thiểu (30px) để tránh nhận diện nhầm khi chỉ chạm (Tap)
+            if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return;
+
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // Người dùng vuốt theo chiều ngang nhiều hơn
+                if (dx > 0) movePlayer(1, 0); // Vuốt Phải
+                else movePlayer(-1, 0);       // Vuốt Trái
+            } else {
+                // Người dùng vuốt theo chiều dọc nhiều hơn
+                if (dy > 0) movePlayer(0, 1); // Vuốt Xuống
+                else movePlayer(0, -1);       // Vuốt Lên
+            }
+        }
+
+        // Restart Button
+        document.getElementById('restart-btn').addEventListener('click', resetGame);
+
+        // Handle window resize to adjust grid
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if(gameState.isPlaying) render();
+            }, 100);
+        });
+
+        // Start the game
+        window.onload = () => {
+            resetGame();
+            // Show intro message
+            setTimeout(() => {
+                showMessage("Welcome", "Explore the dungeon, defeat enemies, and find the stairs to go deeper.<br><br>Move: WASD or Arrow Keys.<br>Bump into enemies to attack.<br>Walk over items to pick them up.");
+            }, 500);
+        };
+
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dungeon Explorer RPG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #0a151a; /* Ink Black */
+            color: #8cbbca; /* Sky Blue (Light) */
+            overflow: hidden; 
+            touch-action: none; 
+        }
+
+        .pixel-font {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        #game-board {
+            display: grid;
+            gap: 1px;
+            background-color: #10161c; /* Ink Black 2 for grid lines */
+            border: 4px solid #415d65; /* Dark Slate Grey */
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+        }
+
+        .tile {
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            transition: background-color 0.2s ease;
+        }
+
+        .tile.wall { background-color: #1d2d34; } /* Jet Black */
+        .tile.floor { background-color: #486672; } /* Blue Slate */
+        .tile.door { background-color: #5c7e88; border: 2px solid #1d2d34; } /* Slate Grey */
+        
+        .tile.fog { background-color: #10161c; z-index: 10; } /* Ink Black 2 */
+
+        .entity {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80%; 
+            line-height: 1;
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Keeping specific distinct colors for entities so they stand out, 
+           but adjusting slightly to match the cool vibe where possible */
+        .player { color: #8cbbca; font-weight: bold; text-shadow: 0 0 5px #6f97a9; z-index: 5; } /* Sky Blue Light */
+        .enemy { color: #fc8181; animation: breathe 2s infinite alternate; z-index: 4; } 
+        .chest { color: #f6e05e; z-index: 3; } 
+        .stairs { color: #d6bcfa; z-index: 2; } 
+
+        .floor-item { 
+            color: #80acba; /* Cool Steel */
+            text-shadow: 0 0 5px #8cbbca; 
+            animation: itemFloat 2s ease-in-out infinite; 
+            z-index: 3;
+            font-size: 70%; 
+        }
+
+        .pixel-font {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        #game-board {
+            display: grid;
+            gap: 1px;
+            background-color: #000;
+            border: 4px solid #4a5568; /* Tailwind gray-600 */
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            /* Grid template will be set dynamically via JS */
+        }
+
+        .tile {
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            transition: background-color 0.2s ease;
+        }
+
+        /* Entity styles using simple CSS shapes/colors or emojis */
+        .tile.wall { background-color: #2d3748; } /* Tailwind gray-800 */
+        .tile.floor { background-color: #4a5568; } /* Tailwind gray-600 */
+        .tile.door { background-color: #718096; border: 2px solid #2d3748; } /* Tailwind gray-500 */
+        
+        .tile.fog { background-color: #000; z-index: 10; }
+
+        .entity {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80%; /* Tự động điều chỉnh theo kích thước ô */
+            line-height: 1;
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        .player { color: #63b3ed; font-weight: bold; text-shadow: 0 0 5px #3182ce; z-index: 5; } /* Tailwind blue-300 */
+        .enemy { color: #fc8181; animation: breathe 2s infinite alternate; z-index: 4; } /* Tailwind red-300 */
+        .chest { color: #f6e05e; z-index: 3; } /* Tailwind yellow-300 */
+        .stairs { color: #d6bcfa; z-index: 2; } /* Tailwind purple-300 */
+
+        /* Style mới cho vật phẩm trên sàn */
+        .floor-item { 
+            color: #68d391; /* Tailwind green-400 */
+            text-shadow: 0 0 5px #9ae6b4; 
+            animation: itemFloat 2s ease-in-out infinite; 
+            z-index: 3;
+            font-size: 70%; /* Nhỏ hơn một chút */
+        }
+        @keyframes itemFloat {
+            0%, 100% { transform: translate(-50%, -50%); }
+            50% { transform: translate(-50%, -60%); }
+        }
+
+        @keyframes breathe {
+            0% { transform: translate(-50%, -50%) scale(0.9); }
+            100% { transform: translate(-50%, -50%) scale(1.1); }
+        }
+        
+        /* Hiệu ứng rung khi người tấn công ra đòn */
+        @keyframes attackShake {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.3); } /* Phóng to nhanh khi đánh */
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .attacking {
+            animation: attackShake 0.2s ease-in-out;
+            z-index: 20 !important; /* Đưa lên trên cùng khi tấn công */
+        }
+
+        /* Hiệu ứng khi đối tượng bị đánh trúng (rung lắc mạnh và nháy đỏ) */
+        @keyframes targetHitShake {
+            0% { transform: translate(-50%, -50%); }
+            20% { transform: translate(-55%, -50%) rotate(-10deg); }
+            40% { transform: translate(-45%, -50%) rotate(10deg); }
+            60% { transform: translate(-55%, -50%) rotate(-10deg); }
+            80% { transform: translate(-45%, -50%) rotate(10deg); }
+            100% { transform: translate(-50%, -50%) rotate(0deg); }
+        }
+
+        @keyframes targetHitFlash {
+            0%, 100% { filter: none; opacity: 1; }
+            50% { filter: brightness(2) sepia(1) hue-rotate(-50deg) saturate(5); opacity: 0.8; } /* Nháy đỏ rực */
+        }
+
+        .hit-effect {
+            animation: targetHitShake 0.3s ease-in-out, targetHitFlash 0.3s ease-in-out;
+        }
+
+        #log-container {
+            height: 150px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #415d65 #13232b;
+        }
+        #log-container::-webkit-scrollbar { width: 8px; }
+        #log-container::-webkit-scrollbar-track { background: #13232b; } /* Jet Black 2 */
+        #log-container::-webkit-scrollbar-thumb { background-color: #415d65; border-radius: 4px; } /* Dark Slate Grey */
+
+        .log-entry { margin-bottom: 0.25rem; }
+        .log-combat { color: #fc8181; }
+        .log-loot { color: #f6e05e; }
+        .log-level { color: #8cbbca; } /* Sky Blue */
+        .log-sys { color: #6f97a9; font-style: italic; } /* Steel Blue */
+
+        /* Controls */
+        .d-pad-btn {
+            width: 50px;
+            height: 50px;
+            background-color: rgba(29, 45, 52, 0.8); /* Jet Black with alpha */
+            border: 2px solid #5c7e88; /* Slate Grey */
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            color: #8cbbca;
+            user-select: none;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(10, 21, 26, 0.5);
+            transition: background-color 0.1s, transform 0.1s;
+        }
+        .d-pad-btn:active {
+            background-color: rgba(65, 93, 101, 0.9); /* Dark Slate Grey */
+            transform: scale(0.95);
+        }
+
+        /* Health Bar */
+        .bar-container {
+            width: 100%;
+            background-color: #13232b; /* Jet Black 2 */
+            border-radius: 4px;
+            height: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #415d65; /* Dark Slate Grey */
+        }
+        .bar-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        .hp-fill { background-color: #e53e3e; } /* Keeping HP red */
+        .xp-fill { background-color: #6f97a9; } /* Steel Blue */
+        .bar-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #e2e8f0;
+            text-shadow: 1px 1px 2px #0a151a;
+            white-space: nowrap;
+        }
+        
+        /* Custom UI Panel Classes */
+        .ui-panel {
+            background-color: #13232b; /* Jet Black 2 */
+            border-color: #415d65; /* Dark Slate Grey */
+        }
+        .ui-inner-panel {
+            background-color: #0a151a; /* Ink Black */
+            border-color: #1d2d34; /* Jet Black */
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen p-2 md:p-4 md:items-center justify-center">
+
+    <div id="game-container" class="w-full max-w-[1200px] flex flex-col md:flex-row gap-4 h-full md:h-auto">
+        
+        <!-- Left Column: Game Area -->
+        <div class="flex-grow flex flex-col items-center justify-center relative">
+            
+            <div id="top-bar" class="w-full flex justify-between items-center mb-2 px-2 pixel-font text-xs md:text-base" style="color: #6f97a9;">
+                <div>Level: <span id="ui-level" style="color: #8cbbca;">1</span></div>
+                <div>Floor: <span id="ui-floor" class="text-purple-300">1</span></div>
+                <div>Score: <span id="ui-score" class="text-yellow-300">0</span></div>
+            </div>
+
+            <div id="board-container" class="w-full aspect-square max-h-[65vh] md:max-h-[85vh] flex items-center justify-center">
+                <div id="game-board" class="w-full h-full"></div>
+            </div>
+
+            <!-- Mobile Controls Overlay (only visible on small screens typically) -->
+            <div id="mobile-controls" class="mt-4 flex flex-col items-center gap-2 md:hidden">
+                <div class="d-pad-btn" id="btn-up">⬆️</div>
+                <div class="flex gap-2">
+                    <div class="d-pad-btn" id="btn-left">⬅️</div>
+                    <div class="d-pad-btn" id="btn-down">⬇️</div>
+                    <div class="d-pad-btn" id="btn-right">➡️</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: UI & Stats -->
+        <div class="w-full md:w-80 flex flex-col gap-4 ui-panel p-4 rounded-xl border-2 shadow-xl overflow-hidden shrink-0">
+            
+            <div class="text-center pb-2 border-b" style="border-color: #415d65;">
+                <h1 class="pixel-font text-lg" style="color: #8cbbca;">Dungeon<br>Explorer</h1>
+            </div>
+
+            <!-- Stats -->
+            <div class="flex flex-col gap-2">
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span>Health</span>
+                    </div>
+                    <div class="bar-container">
+                        <div id="hp-bar" class="bar-fill hp-fill" style="width: 100%;"></div>
+                        <div id="hp-text" class="bar-text">20 / 20</div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span>Experience</span>
+                    </div>
+                    <div class="bar-container">
+                        <div id="xp-bar" class="bar-fill xp-fill" style="width: 0%;"></div>
+                        <div id="xp-text" class="bar-text">0 / 10</div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2 text-sm mt-2 p-2 ui-inner-panel rounded border">
+                    <div>Atk: <span id="ui-atk" class="font-bold text-red-400">5</span></div>
+                    <div>Def: <span id="ui-def" class="font-bold" style="color: #80acba;">2</span></div>
+                </div>
+            </div>
+
+            <!-- Message Log -->
+            <div class="flex-grow flex flex-col min-h-[100px]">
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-2 border-b pb-1" style="color: #5c7e88; border-color: #415d65;">Adventure Log</h3>
+                <div id="log-container" class="ui-inner-panel p-2 rounded border text-xs font-mono h-full flex-grow">
+                    <!-- Logs go here -->
+                </div>
+            </div>
+            
+            <div class="text-xs text-center pt-2" style="color: #5c7e88;">
+                Use Arrow Keys / WASD to move.<br>Bump into enemies to attack.
+            </div>
+        </div>
+    </div>
+
+    <div id="game-over-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+        <div class="ui-panel border-4 border-red-900 p-8 rounded-xl max-w-sm w-full text-center flex flex-col items-center shadow-[0_0_50px_rgba(220,38,38,0.5)]">
+            <h2 class="pixel-font text-3xl text-red-500 mb-4">YOU DIED</h2>
+            <div class="mb-6 space-y-2 text-lg" style="color: #8cbbca;">
+                <p>Floor Reached: <span id="end-floor" class="font-bold text-purple-400">1</span></p>
+                <p>Final Level: <span id="end-level" class="font-bold" style="color: #80acba;">1</span></p>
+                <p>Score: <span id="end-score" class="font-bold text-yellow-400">0</span></p>
+            </div>
+            <button id="restart-btn" class="pixel-font bg-red-800 hover:bg-red-700 text-white py-3 px-6 rounded border-2 border-red-500 transition-colors w-full">TRY AGAIN</button>
+        </div>
+    </div>
+
+    <div id="msg-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-40 flex items-center justify-center p-4">
+        <div class="ui-panel border-2 p-6 rounded-xl max-w-sm w-full text-center flex flex-col items-center" style="border-color: #5c7e88;">
+            <h2 id="msg-title" class="pixel-font text-xl mb-4" style="color: #80acba;">Info</h2>
+            <p id="msg-content" class="mb-6" style="color: #8cbbca;">Message goes here.</p>
+            <button id="msg-close-btn" class="ui-inner-panel hover:bg-opacity-80 text-white py-2 px-6 rounded border transition-colors w-full" style="border-color: #5c7e88; color: #8cbbca;">OK</button>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            mapWidth: 30,
+            mapHeight: 30,
+            viewRadius: 8, // Tăng tầm nhìn xa hơn một chút (từ 6 lên 8)
+            tileSize: 30, // Base size in pixels, adjusts via CSS
+            maxRooms: 10,
+            roomMinSize: 4,
+            roomMaxSize: 9,
+            cameraWidth: 15,
+            cameraHeight: 15
+        };
+
+        // Entity Types
+        const TYPES = {
+            WALL: 'wall',
+            FLOOR: 'floor',
+            PLAYER: 'player',
+            ENEMY: 'enemy',
+            CHEST: 'chest',
+            STAIRS: 'stairs',
+            ITEM: 'item' // Thêm loại vật phẩm trên sàn
+        };
+
+        const ENEMY_TYPES = [
+            { name: "Goblin", symbol: "👺", hp: 10, atk: 3, def: 1, xp: 5, color: "#48bb78" },
+            { name: "Skeleton", symbol: "💀", hp: 15, atk: 4, def: 2, xp: 8, color: "#e2e8f0" },
+            { name: "Orc", symbol: "👹", hp: 25, atk: 6, def: 3, xp: 15, color: "#38a169" },
+            { name: "Slime", symbol: "💧", hp: 8, atk: 2, def: 0, xp: 3, color: "#4299e1" },
+            { name: "Bat", symbol: "🦇", hp: 5, atk: 5, def: 0, xp: 4, color: "#a0aec0" }
+        ];
+
+        const ITEM_TYPES = [
+            { name: "Health Potion", type: "heal", value: 15, symbol: "🍎" },
+            { name: "Big Potion", type: "heal", value: 30, symbol: "🍖" },
+            { name: "Sword Upgrade", type: "atk", value: 2, symbol: "🗡️" },
+            { name: "Shield Upgrade", type: "def", value: 1, symbol: "🛡️" },
+            { name: "Experience Scroll", type: "xp", value: 20, symbol: "📜" }
+        ];
+
+        let gameState = {
+            map: [], // 2D array of tile objects
+            entities: [], // Array of interactive objects (enemies, chests, stairs)
+            player: {
+                x: 0, y: 0,
+                hp: 20, maxHp: 20,
+                atk: 5, def: 2,
+                level: 1, xp: 0, nextXp: 15,
+                symbol: "🧙‍♂️"
+            },
+            floor: 1,
+            score: 0,
+            isPlaying: true
+        };
+
+        // DOM Elements
+        const boardEl = document.getElementById('game-board');
+        const boardContainerEl = document.getElementById('board-container');
+        const logContainer = document.getElementById('log-container');
+        
+        function log(message, type = 'normal') {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            // Add timestamp
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            
+            let colorClass = '';
+            if (type === 'combat') colorClass = 'log-combat';
+            else if (type === 'loot') colorClass = 'log-loot';
+            else if (type === 'sys') colorClass = 'log-sys';
+            else if (type === 'level') colorClass = 'log-level';
+
+            entry.innerHTML = `<span class="mr-1" style="color: #5c7e88;">[${timeStr}]</span> <span class="${colorClass}">${message}</span>`;
+            
+            logContainer.appendChild(entry);
+            // Auto scroll to bottom
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Keep only last 50 logs
+            if (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        function updateUI() {
+            // Stats text
+            document.getElementById('ui-level').innerText = gameState.player.level;
+            document.getElementById('ui-floor').innerText = gameState.floor;
+            document.getElementById('ui-score').innerText = gameState.score;
+            document.getElementById('ui-atk').innerText = gameState.player.atk;
+            document.getElementById('ui-def').innerText = gameState.player.def;
+
+            // Health Bar
+            const hpPercent = Math.max(0, (gameState.player.hp / gameState.player.maxHp) * 100);
+            document.getElementById('hp-bar').style.width = `${hpPercent}%`;
+            document.getElementById('hp-text').innerText = `${gameState.player.hp} / ${gameState.player.maxHp}`;
+            
+            // Change color if low
+            if (hpPercent < 25) document.getElementById('hp-bar').style.backgroundColor = '#9b2c2c'; // Darker red
+            else document.getElementById('hp-bar').style.backgroundColor = '#e53e3e';
+
+            // XP Bar
+            const xpPercent = Math.min(100, (gameState.player.xp / gameState.player.nextXp) * 100);
+            document.getElementById('xp-bar').style.width = `${xpPercent}%`;
+            document.getElementById('xp-text').innerText = `${gameState.player.xp} / ${gameState.player.nextXp}`;
+        }
+
+        function showMessage(title, content) {
+            document.getElementById('msg-title').innerText = title;
+            document.getElementById('msg-content').innerHTML = content;
+            document.getElementById('msg-modal').classList.remove('hidden');
+        }
+
+        document.getElementById('msg-close-btn').addEventListener('click', () => {
+            document.getElementById('msg-modal').classList.add('hidden');
+        });
+
+        class Rect {
+            constructor(x, y, w, h) {
+                this.x1 = x;
+                this.y1 = y;
+                this.x2 = x + w;
+                this.y2 = y + h;
+            }
+            center() {
+                const centerX = Math.floor((this.x1 + this.x2) / 2);
+                const centerY = Math.floor((this.y1 + this.y2) / 2);
+                return { x: centerX, y: centerY };
+            }
+            intersect(other) {
+                return (this.x1 <= other.x2 && this.x2 >= other.x1 &&
+                        this.y1 <= other.y2 && this.y2 >= other.y1);
+            }
+        }
+
+        function createMap() {
+            // Initialize map with walls
+            gameState.map = [];
+            for (let y = 0; y < CONFIG.mapHeight; y++) {
+                let row = [];
+                for (let x = 0; x < CONFIG.mapWidth; x++) {
+                    row.push({ type: TYPES.WALL, explored: false, visible: false });
+                }
+                gameState.map.push(row);
+            }
+            gameState.entities = [];
+
+            const rooms = [];
+            
+            // Simple Room placement
+            for (let i = 0; i < CONFIG.maxRooms; i++) {
+                const w = Math.floor(Math.random() * (CONFIG.roomMaxSize - CONFIG.roomMinSize + 1)) + CONFIG.roomMinSize;
+                const h = Math.floor(Math.random() * (CONFIG.roomMaxSize - CONFIG.roomMinSize + 1)) + CONFIG.roomMinSize;
+                const x = Math.floor(Math.random() * (CONFIG.mapWidth - w - 1)) + 1;
+                const y = Math.floor(Math.random() * (CONFIG.mapHeight - h - 1)) + 1;
+
+                const newRoom = new Rect(x, y, w, h);
+                let failed = false;
+
+                // Check intersection
+                for (let j = 0; j < rooms.length; j++) {
+                    if (newRoom.intersect(rooms[j])) {
+                        failed = true;
+                        break;
+                    }
+                }
+
+                if (!failed) {
+                    // Carve room
+                    createRoom(newRoom);
+                    
+                    const center = newRoom.center();
+
+                    if (rooms.length === 0) {
+                        // Place player in first room
+                        gameState.player.x = center.x;
+                        gameState.player.y = center.y;
+                    } else {
+                        // Connect to previous room
+                        const prevCenter = rooms[rooms.length - 1].center();
+                        
+                        // Randomly start horizontal or vertical tunnel
+                        if (Math.random() > 0.5) {
+                            createHTunnel(prevCenter.x, center.x, prevCenter.y);
+                            createVTunnel(prevCenter.y, center.y, center.x);
+                        } else {
+                            createVTunnel(prevCenter.y, center.y, prevCenter.x);
+                            createHTunnel(prevCenter.x, center.x, center.y);
+                        }
+
+                        // Populate room
+                        populateRoom(newRoom);
+                    }
+                    rooms.push(newRoom);
+                }
+            }
+
+            // Place Stairs in the last room
+            const lastRoomCenter = rooms[rooms.length - 1].center();
+            addEntity(TYPES.STAIRS, lastRoomCenter.x, lastRoomCenter.y, "🌀", { name: "Stairs Down" });
+        }
+
+        function createRoom(room) {
+            for (let x = room.x1 + 1; x < room.x2; x++) {
+                for (let y = room.y1 + 1; y < room.y2; y++) {
+                    gameState.map[y][x].type = TYPES.FLOOR;
+                }
+            }
+        }
+
+        function createHTunnel(x1, x2, y) {
+            const min = Math.min(x1, x2);
+            const max = Math.max(x1, x2);
+            for (let x = min; x <= max; x++) {
+                gameState.map[y][x].type = TYPES.FLOOR;
+            }
+        }
+
+        function createVTunnel(y1, y2, x) {
+            const min = Math.min(y1, y2);
+            const max = Math.max(y1, y2);
+            for (let y = min; y <= max; y++) {
+                gameState.map[y][x].type = TYPES.FLOOR;
+            }
+        }
+
+        function populateRoom(room) {
+            // Chance to spawn enemies
+            const maxEnemies = Math.floor(gameState.floor / 3) + 1;
+            const numEnemies = Math.floor(Math.random() * (maxEnemies + 1));
+            
+            for (let i = 0; i < numEnemies; i++) {
+                const x = Math.floor(Math.random() * (room.x2 - room.x1 - 1)) + room.x1 + 1;
+                const y = Math.floor(Math.random() * (room.y2 - room.y1 - 1)) + room.y1 + 1;
+                
+                if (!isEntityAt(x, y) && !(x === gameState.player.x && y === gameState.player.y)) {
+                    // Pick random enemy scaling somewhat with floor
+                    const enemyTemplate = ENEMY_TYPES[Math.floor(Math.random() * Math.min(ENEMY_TYPES.length, Math.ceil(gameState.floor/2) + 1))];
+                    
+                    // Scale enemy stats based on floor
+                    const multiplier = 1 + (gameState.floor - 1) * 0.2;
+                    
+                    addEntity(TYPES.ENEMY, x, y, enemyTemplate.symbol, {
+                        name: enemyTemplate.name,
+                        hp: Math.floor(enemyTemplate.hp * multiplier),
+                        maxHp: Math.floor(enemyTemplate.hp * multiplier),
+                        atk: Math.floor(enemyTemplate.atk * multiplier),
+                        def: Math.floor(enemyTemplate.def * multiplier),
+                        xp: Math.floor(enemyTemplate.xp * multiplier),
+                        color: enemyTemplate.color,
+                        id: `enemy_${Math.random().toString(36).substr(2, 9)}`
+                    });
+                }
+            }
+
+            // Tỉ lệ xuất hiện vật phẩm trên sàn (tách biệt với rương)
+            if (Math.random() < 0.5) { // 50% cơ hội mỗi phòng
+                const x = Math.floor(Math.random() * (room.x2 - room.x1 - 1)) + room.x1 + 1;
+                const y = Math.floor(Math.random() * (room.y2 - room.y1 - 1)) + room.y1 + 1;
+                
+                if (!isEntityAt(x, y) && !(x === gameState.player.x && y === gameState.player.y)) {
+                    // Chọn ngẫu nhiên vật phẩm hồi máu hoặc kinh nghiệm (không có nâng cấp sức mạnh trên sàn)
+                    const floorItemTypes = ITEM_TYPES.filter(i => i.type === 'heal' || i.type === 'xp');
+                    const itemTemplate = floorItemTypes[Math.floor(Math.random() * floorItemTypes.length)];
+                    
+                    addEntity(TYPES.ITEM, x, y, itemTemplate.symbol, {
+                        item: itemTemplate,
+                        id: `item_${Math.random().toString(36).substr(2, 9)}`
+                    });
+                }
+            }
+
+            // Chance to spawn chest
+            if (Math.random() < 0.3) {
+                const x = Math.floor(Math.random() * (room.x2 - room.x1 - 1)) + room.x1 + 1;
+                const y = Math.floor(Math.random() * (room.y2 - room.y1 - 1)) + room.y1 + 1;
+                
+                if (!isEntityAt(x, y) && !(x === gameState.player.x && y === gameState.player.y)) {
+                    const item = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
+                    addEntity(TYPES.CHEST, x, y, "🧰", { item: item, id: `chest_${Math.random().toString(36).substr(2, 9)}` });
+                }
+            }
+        }
+
+        function addEntity(type, x, y, symbol, properties = {}) {
+            gameState.entities.push({
+                type, x, y, symbol, ...properties
+            });
+        }
+
+        function getEntityAt(x, y) {
+            return gameState.entities.find(e => e.x === x && e.y === y);
+        }
+        
+        function isEntityAt(x, y) {
+            return getEntityAt(x, y) !== undefined;
+        }
+
+        function removeEntity(id) {
+            gameState.entities = gameState.entities.filter(e => e.id !== id);
+        }
+
+        function computeFOV() {
+            const px = gameState.player.x;
+            const py = gameState.player.y;
+            const r = CONFIG.viewRadius;
+
+            // Reset visibility
+            for (let y = 0; y < CONFIG.mapHeight; y++) {
+                for (let x = 0; x < CONFIG.mapWidth; x++) {
+                    gameState.map[y][x].visible = false;
+                }
+            }
+
+            // Mark player position as visible and explored
+            gameState.map[py][px].visible = true;
+            gameState.map[py][px].explored = true;
+
+            // Simple raycasting loop around perimeter
+            for (let i = 0; i < 360; i += 2) { // Step by 2 degrees for performance
+                const rad = i * Math.PI / 180;
+                const dx = Math.cos(rad);
+                const dy = Math.sin(rad);
+
+                let x = px + 0.5;
+                let y = py + 0.5;
+
+                for (let j = 0; j < r; j++) {
+                    x += dx;
+                    y += dy;
+                    
+                    const mapX = Math.floor(x);
+                    const mapY = Math.floor(y);
+
+                    if (mapX < 0 || mapX >= CONFIG.mapWidth || mapY < 0 || mapY >= CONFIG.mapHeight) break;
+
+                    gameState.map[mapY][mapX].visible = true;
+                    gameState.map[mapY][mapX].explored = true;
+
+                    // Stop ray if hits a wall
+                    if (gameState.map[mapY][mapX].type === TYPES.WALL) break;
+                }
+            }
+        }
+
+        function render() {
+            boardEl.innerHTML = '';
+            
+            // Tính toán vị trí camera (15x15) tập trung vào nhân vật
+            let camX = Math.floor(gameState.player.x - CONFIG.cameraWidth / 2);
+            let camY = Math.floor(gameState.player.y - CONFIG.cameraHeight / 2);
+            
+            // Giới hạn camera không vượt quá viền của bản đồ
+            camX = Math.max(0, Math.min(camX, CONFIG.mapWidth - CONFIG.cameraWidth));
+            camY = Math.max(0, Math.min(camY, CONFIG.mapHeight - CONFIG.cameraHeight));
+
+            // Đặt grid cố định cho camera (15x15 ô)
+            boardEl.style.gridTemplateColumns = `repeat(${CONFIG.cameraWidth}, 1fr)`;
+            boardEl.style.gridTemplateRows = `repeat(${CONFIG.cameraHeight}, 1fr)`;
+
+            // Create fragment for performance
+            const fragment = document.createDocumentFragment();
+
+            // Chỉ render những ô nằm trong khung hình của camera
+            for (let y = camY; y < camY + CONFIG.cameraHeight; y++) {
+                for (let x = camX; x < camX + CONFIG.cameraWidth; x++) {
+                    
+                    const tileData = gameState.map[y][x];
+                    const tileEl = document.createElement('div');
+                    tileEl.className = `tile ${tileData.type}`;
+                    
+                    // Handle fog of war
+                    if (!tileData.visible) {
+                        if (tileData.explored) {
+                            // Explored but not visible - darken it
+                            tileEl.style.filter = 'brightness(0.3)';
+                        } else {
+                            // Unexplored
+                            tileEl.classList.add('fog');
+                        }
+                    }
+
+                    // Only render entities if tile is visible or (explored and static)
+                    if (tileData.visible) {
+                        // Check for player
+                        if (x === gameState.player.x && y === gameState.player.y) {
+                            const pEl = document.createElement('div');
+                            pEl.className = 'entity player';
+                            pEl.id = 'player-entity';
+                            pEl.innerHTML = gameState.player.symbol;
+                            tileEl.appendChild(pEl);
+                        } else {
+                            // Check for entities
+                            const entity = getEntityAt(x, y);
+                            if (entity) {
+                                const eEl = document.createElement('div');
+                                eEl.className = `entity ${entity.type}`;
+                                // Thêm class riêng cho vật phẩm trên sàn
+                                if (entity.type === TYPES.ITEM) {
+                                    eEl.classList.add('floor-item');
+                                }
+                                eEl.innerHTML = entity.symbol;
+                                
+                                // Custom ID for animation targeting
+                                if(entity.id) eEl.id = entity.id;
+
+                                tileEl.appendChild(eEl);
+                            }
+                        }
+                    }
+                    
+                    fragment.appendChild(tileEl);
+                }
+            }
+            boardEl.appendChild(fragment);
+            updateUI();
+        }
+
+        function attack(attacker, defender, isPlayerAttacking) {
+            // Damage formula: Atk - (Def / 2), minimum 1
+            const baseDmg = Math.max(1, attacker.atk - Math.floor(defender.def / 2));
+            // Add some randomness +/- 20%
+            const variance = Math.floor(baseDmg * 0.2);
+            const finalDmg = Math.max(1, baseDmg + (Math.floor(Math.random() * (variance * 2 + 1)) - variance));
+
+            defender.hp -= finalDmg;
+
+            // Hiệu ứng hình ảnh khi tấn công và bị đánh trúng
+            let attackerEl, defenderEl;
+            if (isPlayerAttacking) {
+                attackerEl = document.getElementById('player-entity');
+                defenderEl = document.getElementById(defender.id);
+            } else {
+                attackerEl = document.getElementById(attacker.id);
+                defenderEl = document.getElementById('player-entity');
+            }
+
+            // Áp dụng hiệu ứng cho người tấn công (phóng to nhanh)
+            if (attackerEl) {
+                attackerEl.classList.add('attacking');
+                setTimeout(() => attackerEl.classList.remove('attacking'), 200);
+            }
+            // Áp dụng hiệu ứng cho người bị đánh (rung lắc mạnh và nháy đỏ)
+            if (defenderEl) {
+                defenderEl.classList.add('hit-effect');
+                setTimeout(() => defenderEl.classList.remove('hit-effect'), 300);
+            }
+            
+            if (isPlayerAttacking) {
+                log(`You hit ${defender.name} for ${finalDmg} dmg!`, 'combat');
+                if (defender.hp <= 0) {
+                    log(`Defeated ${defender.name}! Gained ${defender.xp} XP.`, 'loot');
+                    gameState.score += defender.maxHp;
+                    gainXP(defender.xp);
+                    removeEntity(defender.id);
+                }
+            } else {
+                log(`${attacker.name} hits you for ${finalDmg} dmg!`, 'combat');
+                if (defender.hp <= 0) {
+                    gameOver();
+                }
+            }
+        }
+
+        function gainXP(amount) {
+            gameState.player.xp += amount;
+            while (gameState.player.xp >= gameState.player.nextXp) {
+                levelUp();
+            }
+        }
+
+        function levelUp() {
+            gameState.player.level++;
+            gameState.player.xp -= gameState.player.nextXp;
+            gameState.player.nextXp = Math.floor(gameState.player.nextXp * 1.5);
+            
+            // Stat increases
+            gameState.player.maxHp += 5;
+            gameState.player.hp = gameState.player.maxHp; // Heal on level up
+            gameState.player.atk += 2;
+            gameState.player.def += 1;
+            
+            log(`LEVEL UP! You are now level ${gameState.player.level}!`, 'level');
+        }
+
+        function interact(entity) {
+            if (entity.type === TYPES.ENEMY) {
+                attack(gameState.player, entity, true);
+                return false; // Don't move into enemy square
+            }
+
+            // Xử lý khi nhặt vật phẩm trên sàn
+            if (entity.type === TYPES.ITEM) {
+                const item = entity.item;
+                log(`Picked up ${item.symbol} ${item.name}.`, 'loot');
+                
+                // Áp dụng hiệu ứng vật phẩm (tương tự như mở rương nhưng không có nâng cấp stat)
+                if (item.type === 'heal') {
+                    const healAmount = Math.min(item.value, gameState.player.maxHp - gameState.player.hp);
+                    gameState.player.hp += healAmount;
+                    if(healAmount > 0) log(`Healed for ${healAmount} HP.`, 'loot');
+                    else log("Already at full health.", 'normal');
+                } else if (item.type === 'xp') {
+                    gainXP(item.value);
+                }
+                
+                removeEntity(entity.id);
+                return true; // Cho phép di chuyển vào ô đó sau khi nhặt
+            }
+            
+            if (entity.type === TYPES.CHEST) {
+                const item = entity.item;
+                log(`Opened chest: Found ${item.symbol} ${item.name}!`, 'loot');
+                gameState.score += 50;
+                
+                // Apply item effect
+                if (item.type === 'heal') {
+                    const healAmount = Math.min(item.value, gameState.player.maxHp - gameState.player.hp);
+                    gameState.player.hp += healAmount;
+                    if(healAmount > 0) log(`Healed for ${healAmount} HP.`, 'loot');
+                    else log("Already at full health.", 'normal');
+                } else if (item.type === 'atk') {
+                    gameState.player.atk += item.value;
+                } else if (item.type === 'def') {
+                    gameState.player.def += item.value;
+                } else if (item.type === 'xp') {
+                    gainXP(item.value);
+                }
+                
+                removeEntity(entity.id);
+                return true; // Can move into square after opening
+            }
+
+            if (entity.type === TYPES.STAIRS) {
+                log(`Descending to floor ${gameState.floor + 1}...`, 'sys');
+                gameState.floor++;
+                gameState.score += 100 * gameState.floor;
+                startFloor();
+                return false; // Map regenerates, position changes
+            }
+
+            return true;
+        }
+
+        function movePlayer(dx, dy) {
+            if (!gameState.isPlaying) return;
+
+            const newX = gameState.player.x + dx;
+            const newY = gameState.player.y + dy;
+
+            // Check boundaries
+            if (newX < 0 || newX >= CONFIG.mapWidth || newY < 0 || newY >= CONFIG.mapHeight) return;
+
+            // Check walls
+            if (gameState.map[newY][newX].type === TYPES.WALL) {
+                // log("You bump into a wall.");
+                return;
+            }
+
+            // Check entities
+            const entity = getEntityAt(newX, newY);
+            let canMove = true;
+            if (entity) {
+                canMove = interact(entity);
+            }
+
+            if (canMove) {
+                gameState.player.x = newX;
+                gameState.player.y = newY;
+            }
+
+            // End of player turn, execute enemy turns
+            if(gameState.isPlaying) {
+                enemiesTurn();
+            }
+
+            computeFOV();
+            render();
+        }
+
+        function enemiesTurn() {
+            // Very simple AI: if player is visible and adjacent, attack.
+            // Otherwise, chance to wander randomly if player is nearby.
+            
+            gameState.entities.forEach(entity => {
+                if (entity.type === TYPES.ENEMY && entity.hp > 0) {
+                    
+                    const dx = gameState.player.x - entity.x;
+                    const dy = gameState.player.y - entity.y;
+                    const dist = Math.abs(dx) + Math.abs(dy); // Manhattan distance
+
+                    if (dist === 1) {
+                        // Adjacent, attack player
+                        attack(entity, gameState.player, false);
+                    } else if (dist < 5 && gameState.map[entity.y][entity.x].visible) {
+                        // Move towards player (simple pathfinding)
+                        let moveX = 0;
+                        let moveY = 0;
+                        
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            moveX = dx > 0 ? 1 : -1;
+                        } else {
+                            moveY = dy > 0 ? 1 : -1;
+                        }
+
+                        const newEx = entity.x + moveX;
+                        const newEy = entity.y + moveY;
+                        
+                        // Check if valid move
+                        if (gameState.map[newEy][newEx].type !== TYPES.WALL && 
+                            !isEntityAt(newEx, newEy) && 
+                            !(newEx === gameState.player.x && newEy === gameState.player.y)) {
+                            entity.x = newEx;
+                            entity.y = newEy;
+                        }
+                    }
+                }
+            });
+        }
+
+        function gameOver() {
+            gameState.isPlaying = false;
+            log("You have died...", 'combat');
+            
+            document.getElementById('end-floor').innerText = gameState.floor;
+            document.getElementById('end-level').innerText = gameState.player.level;
+            document.getElementById('end-score').innerText = gameState.score;
+            document.getElementById('game-over-modal').classList.remove('hidden');
+        }
+
+        function resetGame() {
+            gameState.player = {
+                x: 0, y: 0,
+                hp: 20, maxHp: 20,
+                atk: 5, def: 2,
+                level: 1, xp: 0, nextXp: 15,
+                symbol: "🧙‍♂️"
+            };
+            gameState.floor = 1;
+            gameState.score = 0;
+            gameState.isPlaying = true;
+            logContainer.innerHTML = '';
+            document.getElementById('game-over-modal').classList.add('hidden');
+            
+            log("Welcome to Dungeon Explorer!", 'sys');
+            startFloor();
+        }
+
+        function startFloor() {
+            createMap();
+            computeFOV();
+            render();
+            // Optional: Heal slightly on new floor
+            if(gameState.floor > 1 && gameState.player.hp < gameState.player.maxHp) {
+                const heal = Math.floor(gameState.player.maxHp * 0.2);
+                gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + heal);
+                log(`Rested briefly. Recovered ${heal} HP.`, 'normal');
+            }
+            updateUI();
+        }
+
+        window.addEventListener('keydown', (e) => {
+            // Prevent default scrolling for arrow keys
+            if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].indexOf(e.code) > -1) {
+                e.preventDefault();
+            }
+
+            if (!gameState.isPlaying) return;
+
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    movePlayer(0, -1);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    movePlayer(0, 1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    movePlayer(-1, 0);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    movePlayer(1, 0);
+                    break;
+            }
+        });
+
+        // Mobile Controls (D-pad)
+        document.getElementById('btn-up').addEventListener('click', () => movePlayer(0, -1));
+        document.getElementById('btn-down').addEventListener('click', () => movePlayer(0, 1));
+        document.getElementById('btn-left').addEventListener('click', () => movePlayer(-1, 0));
+        document.getElementById('btn-right').addEventListener('click', () => movePlayer(1, 0));
+
+        // TÍNH NĂNG VUỐT (SWIPE) CHO MOBILE
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        document.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        document.addEventListener('touchend', function(e) {
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+        }, { passive: true });
+
+        function handleSwipe(startX, startY, endX, endY) {
+            if (!gameState.isPlaying) return;
+            
+            let dx = endX - startX;
+            let dy = endY - startY;
+            
+            // Yêu cầu vuốt một đoạn tối thiểu (30px) để tránh nhận diện nhầm khi chỉ chạm (Tap)
+            if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return;
+
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // Người dùng vuốt theo chiều ngang nhiều hơn
+                if (dx > 0) movePlayer(1, 0); // Vuốt Phải
+                else movePlayer(-1, 0);       // Vuốt Trái
+            } else {
+                // Người dùng vuốt theo chiều dọc nhiều hơn
+                if (dy > 0) movePlayer(0, 1); // Vuốt Xuống
+                else movePlayer(0, -1);       // Vuốt Lên
+            }
+        }
+
+        // Restart Button
+        document.getElementById('restart-btn').addEventListener('click', resetGame);
+
+        // Handle window resize to adjust grid
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if(gameState.isPlaying) render();
+            }, 100);
+        });
+
+        // Start the game
+        window.onload = () => {
+            resetGame();
+            // Show intro message
+            setTimeout(() => {
+                showMessage("Welcome", "Explore the dungeon, defeat enemies, and find the stairs to go deeper.<br><br>Move: WASD or Arrow Keys.<br>Bump into enemies to attack.<br>Walk over items to pick them up.");
+            }, 500);
+        };
+
+    </script>
+</body>
+</html>
