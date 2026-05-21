@@ -1,0 +1,1 @@
+{"mode":"playing","coordinateSystem":"origin top-left; x increases right; y increases down","floor":1,"score":0,"camera":{"x":15,"y":2,"width":15,"height":15},"player":{"x":26,"y":10,"hp":20,"maxHp":20,"level":1,"xp":0,"nextXp":15,"atk":5,"def":2},"visibleEntities":[]}

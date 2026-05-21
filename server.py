@@ -51,15 +51,15 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def translate_path(self, path):
-        # Default to web/demo directory
+        # Serve the project root index.html by default
         if path == '/' or path == '/index.html':
-            return os.path.join(base_dir, 'demo', 'index.html')
-        
-        # Check if path exists in demo directory
-        demo_path = os.path.join(base_dir, 'demo', path.lstrip('/'))
-        if os.path.exists(demo_path):
-            return demo_path
-            
+            return os.path.join(base_dir, 'index.html')
+
+        # Check if path exists in the project root first
+        root_path = os.path.join(base_dir, path.lstrip('/'))
+        if os.path.exists(root_path):
+            return root_path
+
         return super().translate_path(path)
 
 if __name__ == "__main__":

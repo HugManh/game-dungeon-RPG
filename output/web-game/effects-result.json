@@ -1,0 +1,22 @@
+{
+  "combatEffects": {
+    "damageText": 1,
+    "hitEffects": 2,
+    "attackEffects": 2,
+    "move": [
+      1,
+      0
+    ]
+  },
+  "xpEffects": {
+    "xpText": 1,
+    "xpBarPulse": 1,
+    "xpTextPulse": 1,
+    "state": "{\"mode\":\"playing\",\"coordinateSystem\":\"origin top-left; x increases right; y increases down\",\"floor\":1,\"score\":1,\"camera\":{\"x\":7,\"y\":4,\"width\":15,\"height\":15},\"player\":{\"x\":15,\"y\":12,\"hp\":20,\"maxHp\":20,\"level\":1,\"xp\":7,\"nextXp\":15,\"atk\":5,\"def\":2},\"visibleEntities\":[]}",
+    "move": [
+      1,
+      0
+    ]
+  },
+  "errors": []
+}
